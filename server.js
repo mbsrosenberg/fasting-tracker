@@ -2,6 +2,11 @@ import express from 'express';
 import cors from 'cors';
 import bodyParser from 'body-parser';
 import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -9,15 +14,19 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(bodyParser.json());
 
-const filePath = './fastingHistory.json';
+const filePath = path.join(__dirname, 'fastingHistory.json');
 
 // Create the file if it doesn't exist
-if (!fs.existsSync(filePath)) {
-  fs.writeFileSync(filePath, '[]');
+try {
+  if (!fs.existsSync(filePath)) {
+    fs.writeFileSync(filePath, '[]', 'utf8');
+  }
+} catch (error) {
+  console.error('Error creating history file:', error);
 }
 
-// Load history from file
-app.get('/history', (req, res) => {
+// API routes
+app.get('/api/history', (req, res) => {
   fs.readFile(filePath, 'utf8', (err, data) => {
     if (err) {
       console.error('Error reading history:', err);
@@ -27,8 +36,7 @@ app.get('/history', (req, res) => {
   });
 });
 
-// Save new history
-app.post('/history', (req, res) => {
+app.post('/api/history', (req, res) => {
   const newHistory = req.body;
   fs.writeFile(filePath, JSON.stringify(newHistory, null, 2), (err) => {
     if (err) {
@@ -39,7 +47,14 @@ app.post('/history', (req, res) => {
   });
 });
 
-// Error handling for server start
+// Serve static files in production
+if (process.env.NODE_ENV === 'production') {
+  app.use(express.static('dist'));
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+  });
+}
+
 const startServer = async () => {
   try {
     await new Promise((resolve, reject) => {
@@ -63,4 +78,6 @@ const startServer = async () => {
   }
 };
 
-startServer(); 
+startServer();
+
+export default app; 

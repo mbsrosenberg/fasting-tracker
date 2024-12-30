@@ -170,14 +170,14 @@ const FastingTracker = () => {
 
   useEffect(() => {
     // Fetch history from server
-    axios.get('http://localhost:5000/history')
+    axios.get('/api/history')
       .then(response => setHistory(response.data))
       .catch(error => console.error('Error fetching history:', error));
   }, []);
 
   const saveHistory = (newHistory) => {
     setHistory(newHistory);
-    axios.post('http://localhost:5000/history', newHistory)
+    axios.post('/api/history', newHistory)
       .catch(error => console.error('Error saving history:', error));
   };
 
