@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Heart, Play, Square, History, Download, Sparkles, Settings, X } from 'lucide-react';
+import { Heart, Play, Square, History, Download, Sparkles, Settings, X, Calendar, Clock } from 'lucide-react';
 import FastingHistory from './FastingHistory';
 
 const FastingTracker = () => {
@@ -13,6 +13,8 @@ const FastingTracker = () => {
     const saved = localStorage.getItem('fastingHistory');
     return saved ? JSON.parse(saved) : [];
   });
+  const [showCustomStart, setShowCustomStart] = useState(false);
+  const [customStartTime, setCustomStartTime] = useState('');
 
   // Load saved data on component mount
   useEffect(() => {
@@ -105,6 +107,24 @@ const FastingTracker = () => {
     return Math.min((elapsedTime / (fastingGoal * 3600)) * 100, 100);
   };
 
+  const handleCustomStart = (e) => {
+    e.preventDefault();
+    if (!customStartTime) return;
+
+    const customDate = new Date();
+    const [hours, minutes] = customStartTime.split(':');
+    customDate.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+
+    // If the time is in the future, subtract 24 hours
+    if (customDate > new Date()) {
+      customDate.setDate(customDate.getDate() - 1);
+    }
+
+    setFastStartTime(customDate.getTime());
+    setIsActive(true);
+    setShowCustomStart(false);
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-purple-50 to-blue-50">
       {/* iOS-style status bar space */}
@@ -183,12 +203,22 @@ const FastingTracker = () => {
 
           {/* Action Button */}
           {!isActive ? (
-            <button
-              onClick={startFast}
-              className="w-full py-4 bg-gradient-to-r from-purple-600 to-blue-600 text-white text-lg font-semibold rounded-2xl active:opacity-90 transition-all duration-300 shadow-lg shadow-purple-200 hover:shadow-xl hover:shadow-purple-300"
-            >
-              Begin Fasting Journey
-            </button>
+            <div className="mt-8 space-y-4">
+              <button
+                onClick={() => setFastStartTime(Date.now())}
+                className="w-full bg-gradient-to-r from-purple-600 to-blue-600 text-white py-3 px-6 rounded-lg font-medium hover:opacity-90 transition-opacity"
+              >
+                Begin Fasting Journey
+              </button>
+              
+              <button
+                onClick={() => setShowCustomStart(true)}
+                className="w-full bg-white text-purple-600 border border-purple-600 py-3 px-6 rounded-lg font-medium hover:bg-purple-50 transition-colors flex items-center justify-center gap-2"
+              >
+                <Clock size={20} />
+                Set Custom Start Time
+              </button>
+            </div>
           ) : (
             <button
               onClick={stopFast}
@@ -280,6 +310,46 @@ const FastingTracker = () => {
           </div>
         </div>
       )}
+
+      {/* Custom Start Time Modal */}
+      {showCustomStart && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md animate-slide-up">
+            <h3 className="text-lg font-bold mb-4">Set Custom Start Time</h3>
+            <form onSubmit={handleCustomStart} className="space-y-4">
+              <div>
+                <label htmlFor="customTime" className="block text-sm font-medium text-gray-700 mb-1">
+                  When did you start fasting?
+                </label>
+                <input
+                  type="time"
+                  id="customTime"
+                  value={customStartTime}
+                  onChange={(e) => setCustomStartTime(e.target.value)}
+                  className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-purple-600 focus:border-transparent"
+                  required
+                />
+              </div>
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowCustomStart(false)}
+                  className="flex-1 py-2 px-4 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2 px-4 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg hover:opacity-90 transition-opacity"
+                >
+                  Start Fast
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       <FastingHistory history={history} setHistory={setHistory} />
     </div>
   );
