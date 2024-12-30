@@ -109,12 +109,44 @@ const FastingTracker = () => {
   const [fastHistory, setFastHistory] = useState([]);
   const [fastingGoal, setFastingGoal] = useState(16);
   const [showSettings, setShowSettings] = useState(false);
-  const [history, setHistory] = useState(() => {
-    const saved = localStorage.getItem('fastingHistory');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [history, setHistory] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [showCustomStart, setShowCustomStart] = useState(false);
   const [customStartTime, setCustomStartTime] = useState('');
+
+  // Load history from server on component mount
+  useEffect(() => {
+    const fetchHistory = async () => {
+      try {
+        const response = await axios.get('/api/history');
+        if (response.data && Array.isArray(response.data)) {
+          setHistory(response.data);
+        }
+      } catch (error) {
+        console.error('Error fetching history:', error);
+        // Fallback to localStorage if server fetch fails
+        const savedHistory = localStorage.getItem('fastingHistory');
+        if (savedHistory) {
+          setHistory(JSON.parse(savedHistory));
+        }
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchHistory();
+  }, []);
+
+  // Save history to both localStorage and server
+  const saveHistory = async (newHistory) => {
+    setHistory(newHistory);
+    localStorage.setItem('fastingHistory', JSON.stringify(newHistory));
+    try {
+      await axios.post('/api/history', newHistory);
+    } catch (error) {
+      console.error('Error saving history:', error);
+    }
+  };
 
   // Load saved data on component mount
   useEffect(() => {
@@ -176,19 +208,6 @@ const FastingTracker = () => {
     }
     return () => clearInterval(interval);
   }, [isActive, fastStartTime]);
-
-  useEffect(() => {
-    // Fetch history from server
-    axios.get('/api/history')
-      .then(response => setHistory(response.data))
-      .catch(error => console.error('Error fetching history:', error));
-  }, []);
-
-  const saveHistory = (newHistory) => {
-    setHistory(newHistory);
-    axios.post('/api/history', newHistory)
-      .catch(error => console.error('Error saving history:', error));
-  };
 
   const formatTime = (totalSeconds) => {
     const hours = Math.floor(totalSeconds / 3600);
@@ -261,18 +280,30 @@ const FastingTracker = () => {
   const handleCompleteFast = () => {
     const endTime = Date.now();
     const duration = formatDuration(endTime - fastStartTime.getTime());
+    
+    // Check if this fast already exists in history
+    const existingFastIndex = history.findIndex(
+      fast => fast.startTime === fastStartTime.getTime()
+    );
+
     const newFast = {
       type: `${fastingGoal}:8 Fast`,
       duration,
-      completedAt: endTime
+      completedAt: endTime,
+      startTime: fastStartTime.getTime() // Add startTime for reference
     };
-    
-    const updatedHistory = [newFast, ...history];
-    setHistory(updatedHistory);
-    localStorage.setItem('fastingHistory', JSON.stringify(updatedHistory));
-    axios.post('/api/history', updatedHistory)
-      .catch(error => console.error('Error saving history:', error));
-      
+
+    let updatedHistory;
+    if (existingFastIndex !== -1) {
+      // Update existing fast
+      updatedHistory = [...history];
+      updatedHistory[existingFastIndex] = newFast;
+    } else {
+      // Add new fast
+      updatedHistory = [newFast, ...history];
+    }
+
+    saveHistory(updatedHistory);
     setIsActive(false);
     setFastStartTime(null);
     setElapsedTime(0);

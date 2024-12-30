@@ -19,14 +19,27 @@ const filePath = process.env.NODE_ENV === 'production'
   ? '/tmp/fastingHistory.json'  // For Vercel
   : path.join(process.env.HOME || process.env.USERPROFILE, '.fastingHistory.json'); // For local development
 
-// Create the file if it doesn't exist
-try {
-  if (!fs.existsSync(filePath)) {
-    fs.writeFileSync(filePath, '[]', 'utf8');
+// Initialize history file with existing data
+const initializeHistoryFile = () => {
+  try {
+    if (!fs.existsSync(filePath)) {
+      // Check for backup first
+      if (fs.existsSync(`${filePath}.backup`)) {
+        const backupData = fs.readFileSync(`${filePath}.backup`, 'utf8');
+        fs.writeFileSync(filePath, backupData);
+        console.log('Restored history from backup');
+        return;
+      }
+      // Create new file if no backup exists
+      fs.writeFileSync(filePath, '[]', 'utf8');
+      console.log('Created new history file');
+    }
+  } catch (error) {
+    console.error('Error initializing history file:', error);
   }
-} catch (error) {
-  console.error('Error creating history file:', error);
-}
+};
+
+initializeHistoryFile();
 
 // Backup the history file periodically
 const backupHistory = () => {
@@ -49,11 +62,14 @@ app.get('/api/history', (req, res) => {
     if (fs.existsSync(filePath)) {
       data = fs.readFileSync(filePath, 'utf8');
     } else if (fs.existsSync(`${filePath}.backup`)) {
-      // Restore from backup if main file is missing
       data = fs.readFileSync(`${filePath}.backup`, 'utf8');
+      // Restore main file from backup
       fs.writeFileSync(filePath, data);
     }
-    res.json(JSON.parse(data));
+    const history = JSON.parse(data);
+    // Sort history by completedAt in descending order
+    history.sort((a, b) => b.completedAt - a.completedAt);
+    res.json(history);
   } catch (error) {
     console.error('Error reading history:', error);
     res.status(500).json({ error: 'Failed to load history' });
@@ -63,9 +79,13 @@ app.get('/api/history', (req, res) => {
 app.post('/api/history', (req, res) => {
   try {
     const newHistory = req.body;
-    fs.writeFileSync(filePath, JSON.stringify(newHistory, null, 2));
-    // Create immediate backup after write
-    backupHistory();
+    // Ensure history is an array and sort it
+    const sortedHistory = Array.isArray(newHistory) 
+      ? newHistory.sort((a, b) => b.completedAt - a.completedAt)
+      : [];
+    
+    fs.writeFileSync(filePath, JSON.stringify(sortedHistory, null, 2));
+    backupHistory(); // Create backup after successful write
     res.status(200).json({ message: 'History saved successfully' });
   } catch (error) {
     console.error('Error saving history:', error);
