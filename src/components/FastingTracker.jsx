@@ -281,25 +281,32 @@ const FastingTracker = () => {
     const endTime = Date.now();
     const duration = formatDuration(endTime - fastStartTime.getTime());
     
-    // Check if this fast already exists in history
-    const existingFastIndex = history.findIndex(
-      fast => fast.startTime === fastStartTime.getTime()
-    );
+    // Find the original fast that was continued (if any)
+    const originalFastIndex = history.findIndex(fast => {
+      const fastStartDate = new Date(fast.completedAt);
+      const fastDuration = fast.duration.split(':').map(Number);
+      const [hours, minutes, seconds] = fastDuration;
+      const calculatedStartTime = fastStartDate.getTime() - 
+        ((hours * 3600 + minutes * 60 + seconds) * 1000);
+      
+      // Compare with a small tolerance to account for millisecond differences
+      return Math.abs(calculatedStartTime - fastStartTime.getTime()) < 1000;
+    });
 
     const newFast = {
       type: `${fastingGoal}:8 Fast`,
       duration,
       completedAt: endTime,
-      startTime: fastStartTime.getTime() // Add startTime for reference
+      startTime: fastStartTime.getTime()
     };
 
     let updatedHistory;
-    if (existingFastIndex !== -1) {
-      // Update existing fast
+    if (originalFastIndex !== -1) {
+      // Update the existing fast instead of creating a new one
       updatedHistory = [...history];
-      updatedHistory[existingFastIndex] = newFast;
+      updatedHistory[originalFastIndex] = newFast;
     } else {
-      // Add new fast
+      // This is a new fast, add it to the beginning
       updatedHistory = [newFast, ...history];
     }
 
