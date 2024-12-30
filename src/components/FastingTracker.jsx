@@ -279,10 +279,10 @@ const FastingTracker = () => {
   const handleCompleteFast = () => {
     const endTime = Date.now();
     const duration = formatDuration(endTime - fastStartTime.getTime());
-    
+
     // Find the fast we're continuing by matching start times
     const existingFastIndex = history.findIndex(fast => {
-      const timeDiff = Math.abs(new Date(fast.startTime).getTime() - fastStartTime.getTime());
+      const timeDiff = Math.abs(fast.startTime - fastStartTime.getTime());
       return timeDiff < 5000; // 5 second tolerance
     });
 
