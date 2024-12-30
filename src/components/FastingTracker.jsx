@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Heart, Play, Square, History, Download, Sparkles, Settings, X } from 'lucide-react';
+import FastingHistory from './FastingHistory';
 
 const FastingTracker = () => {
   const [fastStartTime, setFastStartTime] = useState(null);
@@ -8,6 +9,10 @@ const FastingTracker = () => {
   const [fastHistory, setFastHistory] = useState([]);
   const [fastingGoal, setFastingGoal] = useState(16);
   const [showSettings, setShowSettings] = useState(false);
+  const [history, setHistory] = useState(() => {
+    const saved = localStorage.getItem('fastingHistory');
+    return saved ? JSON.parse(saved) : [];
+  });
 
   // Load saved data on component mount
   useEffect(() => {
@@ -275,6 +280,7 @@ const FastingTracker = () => {
           </div>
         </div>
       )}
+      <FastingHistory history={history} setHistory={setHistory} />
     </div>
   );
 };
