@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { Heart, Play, Square, History, Download, Sparkles, Settings, X, Calendar, Clock, Pencil, Trash2, Check } from 'lucide-react';
-import FastingHistory from './FastingHistory';
 import axios from 'axios';
 
 const HistoryItem = ({ fast, index, onDelete, onEdit }) => {
@@ -103,7 +102,10 @@ const FastingTracker = () => {
   const [fastHistory, setFastHistory] = useState([]);
   const [fastingGoal, setFastingGoal] = useState(16);
   const [showSettings, setShowSettings] = useState(false);
-  const [history, setHistory] = useState([]);
+  const [history, setHistory] = useState(() => {
+    const saved = localStorage.getItem('fastingHistory');
+    return saved ? JSON.parse(saved) : [];
+  });
   const [showCustomStart, setShowCustomStart] = useState(false);
   const [customStartTime, setCustomStartTime] = useState('');
 
@@ -240,6 +242,25 @@ const FastingTracker = () => {
     saveHistory(updatedHistory);
   };
 
+  const handleCompleteFast = () => {
+    const endTime = Date.now();
+    const duration = formatTime(endTime - fastStartTime);
+    const newFast = {
+      type: `${fastingGoal}:8 Fast`,
+      duration,
+      completedAt: endTime
+    };
+    
+    const updatedHistory = [newFast, ...history];
+    setHistory(updatedHistory);
+    axios.post('/api/history', updatedHistory)
+      .catch(error => console.error('Error saving history:', error));
+      
+    setIsActive(false);
+    setFastStartTime(null);
+    setElapsedTime(0);
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-purple-50 to-blue-50">
       {/* iOS-style status bar space */}
@@ -320,7 +341,11 @@ const FastingTracker = () => {
           {!isActive ? (
             <div className="mt-8 space-y-4">
               <button
-                onClick={() => setFastStartTime(Date.now())}
+                onClick={() => {
+                  const startTime = Date.now();
+                  setFastStartTime(startTime);
+                  setIsActive(true);
+                }}
                 className="w-full bg-gradient-to-r from-purple-600 to-blue-600 text-white py-3 px-6 rounded-lg font-medium hover:opacity-90 transition-opacity"
               >
                 Begin Fasting Journey
@@ -336,7 +361,7 @@ const FastingTracker = () => {
             </div>
           ) : (
             <button
-              onClick={stopFast}
+              onClick={handleCompleteFast}
               className="w-full py-4 bg-gradient-to-r from-red-500 to-orange-500 text-white text-lg font-semibold rounded-2xl active:opacity-90 transition-all duration-300 shadow-lg shadow-red-200 hover:shadow-xl hover:shadow-red-300"
             >
               Complete Fast
@@ -447,8 +472,6 @@ const FastingTracker = () => {
           </div>
         </div>
       )}
-
-      <FastingHistory history={history} setHistory={setHistory} />
     </div>
   );
 };
