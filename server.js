@@ -14,10 +14,15 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(bodyParser.json());
 
-// Use an absolute path outside of the project directory
+// Use a persistent path for production
 const filePath = process.env.NODE_ENV === 'production'
-  ? '/tmp/fastingHistory.json'  // For Vercel
-  : path.join(process.env.HOME || process.env.USERPROFILE, '.fastingHistory.json'); // For local development
+  ? path.join(process.cwd(), 'data', 'fastingHistory.json')  // Store in project's data directory
+  : path.join(process.env.HOME || process.env.USERPROFILE, '.fastingHistory.json');
+
+// Create data directory if it doesn't exist
+if (!fs.existsSync(path.join(process.cwd(), 'data'))) {
+  fs.mkdirSync(path.join(process.cwd(), 'data'), { recursive: true });
+}
 
 // Initialize history file with existing data
 const initializeHistoryFile = () => {

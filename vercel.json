@@ -4,23 +4,20 @@
     {
       "src": "server.js",
       "use": "@vercel/node"
-    },
-    {
-      "src": "package.json",
-      "use": "@vercel/static-build",
-      "config": { "distDir": "dist" }
     }
   ],
   "routes": [
     {
       "src": "/api/(.*)",
       "dest": "server.js"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "dist/$1"
     }
   ],
+  "functions": {
+    "api/**": {
+      "memory": 1024,
+      "maxDuration": 10
+    }
+  },
   "env": {
     "NODE_ENV": "production"
   }
