@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Heart, Play, Square, History, Download, Sparkles, Settings, X, Calendar, Clock, Pencil, Trash2, Check } from 'lucide-react';
 import FastingHistory from './FastingHistory';
+import axios from 'axios';
 
 const HistoryItem = ({ fast, index, onDelete, onEdit }) => {
   const [isEditing, setIsEditing] = useState(false);
@@ -102,10 +103,7 @@ const FastingTracker = () => {
   const [fastHistory, setFastHistory] = useState([]);
   const [fastingGoal, setFastingGoal] = useState(16);
   const [showSettings, setShowSettings] = useState(false);
-  const [history, setHistory] = useState(() => {
-    const saved = localStorage.getItem('fastingHistory');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [history, setHistory] = useState([]);
   const [showCustomStart, setShowCustomStart] = useState(false);
   const [customStartTime, setCustomStartTime] = useState('');
 
@@ -170,6 +168,19 @@ const FastingTracker = () => {
     return () => clearInterval(interval);
   }, [isActive, fastStartTime]);
 
+  useEffect(() => {
+    // Fetch history from server
+    axios.get('http://localhost:5000/history')
+      .then(response => setHistory(response.data))
+      .catch(error => console.error('Error fetching history:', error));
+  }, []);
+
+  const saveHistory = (newHistory) => {
+    setHistory(newHistory);
+    axios.post('http://localhost:5000/history', newHistory)
+      .catch(error => console.error('Error saving history:', error));
+  };
+
   const formatTime = (totalSeconds) => {
     const hours = Math.floor(totalSeconds / 3600);
     const minutes = Math.floor((totalSeconds % 3600) / 60);
@@ -219,16 +230,14 @@ const FastingTracker = () => {
   };
 
   const handleDeleteFast = (index) => {
-    const newHistory = history.filter((_, i) => i !== index);
-    setHistory(newHistory);
-    localStorage.setItem('fastingHistory', JSON.stringify(newHistory));
+    const updatedHistory = history.filter((_, i) => i !== index);
+    saveHistory(updatedHistory);
   };
 
   const handleEditFast = (index, updatedFast) => {
-    const newHistory = [...history];
-    newHistory[index] = updatedFast;
-    setHistory(newHistory);
-    localStorage.setItem('fastingHistory', JSON.stringify(newHistory));
+    const updatedHistory = [...history];
+    updatedHistory[index] = updatedFast;
+    saveHistory(updatedHistory);
   };
 
   return (
