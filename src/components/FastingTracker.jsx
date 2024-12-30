@@ -226,8 +226,9 @@ const FastingTracker = () => {
       customDate.setDate(customDate.getDate() - 1);
     }
 
-    setFastStartTime(customDate.getTime());
+    setFastStartTime(customDate);
     setIsActive(true);
+    setElapsedTime(Math.floor((Date.now() - customDate.getTime()) / 1000));
     setShowCustomStart(false);
   };
 
@@ -242,9 +243,17 @@ const FastingTracker = () => {
     saveHistory(updatedHistory);
   };
 
+  const formatDuration = (milliseconds) => {
+    const seconds = Math.floor(milliseconds / 1000);
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const remainingSeconds = seconds % 60;
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+  };
+
   const handleCompleteFast = () => {
     const endTime = Date.now();
-    const duration = formatTime(endTime - fastStartTime);
+    const duration = formatDuration(endTime - fastStartTime.getTime());
     const newFast = {
       type: `${fastingGoal}:8 Fast`,
       duration,
@@ -253,6 +262,7 @@ const FastingTracker = () => {
     
     const updatedHistory = [newFast, ...history];
     setHistory(updatedHistory);
+    localStorage.setItem('fastingHistory', JSON.stringify(updatedHistory));
     axios.post('/api/history', updatedHistory)
       .catch(error => console.error('Error saving history:', error));
       
@@ -342,9 +352,10 @@ const FastingTracker = () => {
             <div className="mt-8 space-y-4">
               <button
                 onClick={() => {
-                  const startTime = Date.now();
+                  const startTime = new Date();
                   setFastStartTime(startTime);
                   setIsActive(true);
+                  setElapsedTime(0);
                 }}
                 className="w-full bg-gradient-to-r from-purple-600 to-blue-600 text-white py-3 px-6 rounded-lg font-medium hover:opacity-90 transition-opacity"
               >
