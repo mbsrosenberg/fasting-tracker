@@ -1,6 +1,99 @@
 import React, { useState, useEffect } from 'react';
-import { Heart, Play, Square, History, Download, Sparkles, Settings, X, Calendar, Clock } from 'lucide-react';
+import { Heart, Play, Square, History, Download, Sparkles, Settings, X, Calendar, Clock, Pencil, Trash2, Check } from 'lucide-react';
 import FastingHistory from './FastingHistory';
+
+const HistoryItem = ({ fast, index, onDelete, onEdit }) => {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedDuration, setEditedDuration] = useState(fast.duration);
+  const [editedDate, setEditedDate] = useState(
+    new Date(fast.completedAt).toISOString().split('T')[0]
+  );
+
+  const handleSave = () => {
+    onEdit(index, {
+      ...fast,
+      duration: editedDuration,
+      completedAt: new Date(editedDate).getTime()
+    });
+    setIsEditing(false);
+  };
+
+  return (
+    <div className="bg-white rounded-lg shadow mb-2 p-4">
+      {!isEditing ? (
+        <div className="flex justify-between items-center">
+          <div>
+            <p className="font-medium">
+              {new Date(fast.completedAt).toLocaleDateString(undefined, {
+                weekday: 'short',
+                month: 'short',
+                day: 'numeric'
+              })}
+            </p>
+            <p className="text-sm text-gray-600">
+              Duration: {fast.duration}
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setIsEditing(true)}
+              className="p-2 text-purple-600 hover:bg-purple-50 rounded-full transition-colors"
+              aria-label="Edit fast"
+            >
+              <Pencil size={20} />
+            </button>
+            <button
+              onClick={() => onDelete(index)}
+              className="p-2 text-red-500 hover:bg-red-50 rounded-full transition-colors"
+              aria-label="Delete fast"
+            >
+              <Trash2 size={20} />
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Date
+            </label>
+            <input
+              type="date"
+              value={editedDate}
+              onChange={(e) => setEditedDate(e.target.value)}
+              className="w-full p-2 border rounded-lg"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Duration
+            </label>
+            <input
+              type="text"
+              value={editedDuration}
+              onChange={(e) => setEditedDuration(e.target.value)}
+              className="w-full p-2 border rounded-lg"
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={() => setIsEditing(false)}
+              className="p-2 text-gray-600 hover:bg-gray-50 rounded-full transition-colors"
+            >
+              <X size={20} />
+            </button>
+            <button
+              onClick={handleSave}
+              className="p-2 text-green-600 hover:bg-green-50 rounded-full transition-colors"
+            >
+              <Check size={20} />
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
 const FastingTracker = () => {
   const [fastStartTime, setFastStartTime] = useState(null);
@@ -125,6 +218,19 @@ const FastingTracker = () => {
     setShowCustomStart(false);
   };
 
+  const handleDeleteFast = (index) => {
+    const newHistory = history.filter((_, i) => i !== index);
+    setHistory(newHistory);
+    localStorage.setItem('fastingHistory', JSON.stringify(newHistory));
+  };
+
+  const handleEditFast = (index, updatedFast) => {
+    const newHistory = [...history];
+    newHistory[index] = updatedFast;
+    setHistory(newHistory);
+    localStorage.setItem('fastingHistory', JSON.stringify(newHistory));
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-purple-50 to-blue-50">
       {/* iOS-style status bar space */}
@@ -229,44 +335,27 @@ const FastingTracker = () => {
           )}
         </div>
 
-        {/* History Section */}
-        <div className="bg-white/80 backdrop-blur-lg rounded-3xl shadow-lg p-6">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            <History size={20} className="text-purple-500" />
+        {/* Fasting History Section */}
+        <div className="mt-8">
+          <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
+            <span className="text-purple-600">⏰</span> 
             Fasting History
           </h2>
-          <div className="space-y-4">
-            {fastHistory.slice().reverse().map((fast, index) => (
-              <div 
-                key={index} 
-                className="flex justify-between items-center py-3 border-b border-gray-100 last:border-0 hover:bg-purple-50/50 rounded-xl px-3 transition-colors"
-              >
-                <div>
-                  <div className="text-sm font-medium text-gray-900">
-                    {fast.startTime.toLocaleDateString(undefined, { 
-                      weekday: 'short',
-                      month: 'short',
-                      day: 'numeric'
-                    })}
-                  </div>
-                  <div className="text-sm text-gray-500">
-                    Duration: {formatTime(fast.duration)}
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="text-sm font-medium text-purple-600">
-                    {(fast.duration / 3600).toFixed(1)}h
-                  </div>
-                </div>
-              </div>
-            ))}
-            {fastHistory.length === 0 && (
-              <div className="text-center py-8 text-gray-500">
-                <Sparkles className="w-12 h-12 mx-auto mb-3 text-purple-300" />
-                Begin your fasting journey today!
-              </div>
-            )}
-          </div>
+          {history.length === 0 ? (
+            <p className="text-gray-600">Begin your fasting journey today!</p>
+          ) : (
+            <div className="space-y-2">
+              {history.map((fast, index) => (
+                <HistoryItem
+                  key={index}
+                  fast={fast}
+                  index={index}
+                  onDelete={handleDeleteFast}
+                  onEdit={handleEditFast}
+                />
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
