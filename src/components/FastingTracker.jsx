@@ -106,10 +106,9 @@ const FastingTracker = () => {
   const [fastStartTime, setFastStartTime] = useState(null);
   const [elapsedTime, setElapsedTime] = useState(0);
   const [isActive, setIsActive] = useState(false);
-  const [fastHistory, setFastHistory] = useState([]);
+  const [history, setHistory] = useState([]);
   const [fastingGoal, setFastingGoal] = useState(16);
   const [showSettings, setShowSettings] = useState(false);
-  const [history, setHistory] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showCustomStart, setShowCustomStart] = useState(false);
   const [customStartTime, setCustomStartTime] = useState('');
@@ -157,7 +156,7 @@ const FastingTracker = () => {
 
       if (savedHistory) {
         const parsedHistory = JSON.parse(savedHistory);
-        setFastHistory(parsedHistory.map(fast => ({
+        setHistory(parsedHistory.map(fast => ({
           ...fast,
           startTime: new Date(fast.startTime),
           endTime: new Date(fast.endTime)
@@ -180,10 +179,10 @@ const FastingTracker = () => {
 
   // Storage effects
   useEffect(() => {
-    if (fastHistory.length > 0) {
-      localStorage.setItem('fastHistory_v2', JSON.stringify(fastHistory));
+    if (history.length > 0) {
+      localStorage.setItem('fastHistory_v2', JSON.stringify(history));
     }
-  }, [fastHistory]);
+  }, [history]);
 
   useEffect(() => {
     localStorage.setItem('fastingGoal_v2', fastingGoal.toString());
@@ -225,7 +224,7 @@ const FastingTracker = () => {
   const stopFast = () => {
     const endTime = new Date();
     const duration = elapsedTime;
-    setFastHistory([...fastHistory, {
+    setHistory([...history, {
       startTime: fastStartTime,
       duration: duration,
       endTime: endTime
@@ -281,11 +280,10 @@ const FastingTracker = () => {
     const endTime = Date.now();
     const duration = formatDuration(endTime - fastStartTime.getTime());
     
-    // Find any existing fast with a start time within 5 seconds
-    const originalFastIndex = history.findIndex(fast => {
-      const timeDifference = Math.abs(fast.startTime - fastStartTime.getTime());
-      const fiveSeconds = 5000; // 5 seconds in milliseconds
-      return timeDifference <= fiveSeconds;
+    // Find the fast we're continuing by matching start times
+    const existingFastIndex = history.findIndex(fast => {
+      const timeDiff = Math.abs(new Date(fast.startTime).getTime() - fastStartTime.getTime());
+      return timeDiff < 5000; // 5 second tolerance
     });
 
     const newFast = {
@@ -296,10 +294,11 @@ const FastingTracker = () => {
     };
 
     let updatedHistory;
-    if (originalFastIndex !== -1) {
-      // Update existing fast
-      updatedHistory = [...history];
-      updatedHistory[originalFastIndex] = newFast;
+    if (existingFastIndex !== -1) {
+      // Update the existing fast
+      updatedHistory = history.map((fast, index) => 
+        index === existingFastIndex ? newFast : fast
+      );
     } else {
       // Add new fast
       updatedHistory = [newFast, ...history];
@@ -312,9 +311,10 @@ const FastingTracker = () => {
   };
 
   const handleContinueFast = (fast) => {
-    setFastStartTime(new Date(fast.startTime));
+    const startTime = new Date(fast.startTime);
+    setFastStartTime(startTime);
     setIsActive(true);
-    setElapsedTime(Math.floor((Date.now() - fast.startTime) / 1000));
+    setElapsedTime(Math.floor((Date.now() - startTime.getTime()) / 1000));
   };
 
   return (
