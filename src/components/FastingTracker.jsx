@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Heart, Play, Square, History, Download, Sparkles, Settings, X, Calendar, Clock, Pencil, Trash2, Check } from 'lucide-react';
 import axios from 'axios';
 
-const HistoryItem = ({ fast, index, onDelete, onEdit }) => {
+const FastingHistoryItem = ({ fast, index, onDelete, onEdit, onContinue }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editedDuration, setEditedDuration] = useState(fast.duration);
   const [editedDate, setEditedDate] = useState(
@@ -35,6 +35,13 @@ const HistoryItem = ({ fast, index, onDelete, onEdit }) => {
             </p>
           </div>
           <div className="flex gap-2">
+            <button
+              onClick={() => onContinue(fast)}
+              className="p-2 text-green-600 hover:bg-green-50 rounded-full transition-colors"
+              aria-label="Continue fast"
+            >
+              <Play size={20} />
+            </button>
             <button
               onClick={() => setIsEditing(true)}
               className="p-2 text-purple-600 hover:bg-purple-50 rounded-full transition-colors"
@@ -271,6 +278,20 @@ const FastingTracker = () => {
     setElapsedTime(0);
   };
 
+  const handleContinueFast = (fast) => {
+    // Calculate when this fast originally started
+    const endTime = new Date(fast.completedAt);
+    const duration = fast.duration.split(':').map(Number);
+    const hours = duration[0];
+    const minutes = duration[1];
+    const seconds = duration[2];
+    const startTime = new Date(endTime.getTime() - ((hours * 3600 + minutes * 60 + seconds) * 1000));
+    
+    setFastStartTime(startTime);
+    setIsActive(true);
+    setElapsedTime(Math.floor((Date.now() - startTime.getTime()) / 1000));
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-purple-50 to-blue-50">
       {/* iOS-style status bar space */}
@@ -391,12 +412,13 @@ const FastingTracker = () => {
           ) : (
             <div className="space-y-2">
               {history.map((fast, index) => (
-                <HistoryItem
+                <FastingHistoryItem
                   key={index}
                   fast={fast}
                   index={index}
                   onDelete={handleDeleteFast}
                   onEdit={handleEditFast}
+                  onContinue={handleContinueFast}
                 />
               ))}
             </div>
