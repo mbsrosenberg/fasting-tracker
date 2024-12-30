@@ -281,16 +281,11 @@ const FastingTracker = () => {
     const endTime = Date.now();
     const duration = formatDuration(endTime - fastStartTime.getTime());
     
-    // Find the original fast that was continued (if any)
+    // Find any existing fast with a start time within 5 seconds
     const originalFastIndex = history.findIndex(fast => {
-      const fastStartDate = new Date(fast.completedAt);
-      const fastDuration = fast.duration.split(':').map(Number);
-      const [hours, minutes, seconds] = fastDuration;
-      const calculatedStartTime = fastStartDate.getTime() - 
-        ((hours * 3600 + minutes * 60 + seconds) * 1000);
-      
-      // Compare with a small tolerance to account for millisecond differences
-      return Math.abs(calculatedStartTime - fastStartTime.getTime()) < 1000;
+      const timeDifference = Math.abs(fast.startTime - fastStartTime.getTime());
+      const fiveSeconds = 5000; // 5 seconds in milliseconds
+      return timeDifference <= fiveSeconds;
     });
 
     const newFast = {
@@ -302,11 +297,11 @@ const FastingTracker = () => {
 
     let updatedHistory;
     if (originalFastIndex !== -1) {
-      // Update the existing fast instead of creating a new one
+      // Update existing fast
       updatedHistory = [...history];
       updatedHistory[originalFastIndex] = newFast;
     } else {
-      // This is a new fast, add it to the beginning
+      // Add new fast
       updatedHistory = [newFast, ...history];
     }
 
@@ -317,17 +312,9 @@ const FastingTracker = () => {
   };
 
   const handleContinueFast = (fast) => {
-    // Calculate when this fast originally started
-    const endTime = new Date(fast.completedAt);
-    const duration = fast.duration.split(':').map(Number);
-    const hours = duration[0];
-    const minutes = duration[1];
-    const seconds = duration[2];
-    const startTime = new Date(endTime.getTime() - ((hours * 3600 + minutes * 60 + seconds) * 1000));
-    
-    setFastStartTime(startTime);
+    setFastStartTime(new Date(fast.startTime));
     setIsActive(true);
-    setElapsedTime(Math.floor((Date.now() - startTime.getTime()) / 1000));
+    setElapsedTime(Math.floor((Date.now() - fast.startTime) / 1000));
   };
 
   return (
