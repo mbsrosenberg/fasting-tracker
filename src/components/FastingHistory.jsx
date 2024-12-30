@@ -1,51 +1,109 @@
-import React from 'react';
-import { useDrag } from '@use-gesture/react';
-import { animated, useSpring } from '@react-spring/web';
-import { Trash2 } from 'lucide-react';
+import React, { useState } from 'react';
+import { Pencil, Trash2, X, Check } from 'lucide-react';
 
-const SwipeableHistoryItem = ({ fast, onDelete, index }) => {
-  const [{ x }, api] = useSpring(() => ({ x: 0 }));
+const FastingHistoryItem = ({ fast, index, onDelete, onEdit }) => {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedDuration, setEditedDuration] = useState(fast.duration);
+  const [editedDate, setEditedDate] = useState(
+    new Date(fast.completedAt).toISOString().split('T')[0]
+  );
 
-  const bind = useDrag(({ movement: [mx], down, direction: [xDir], velocity: [vx] }) => {
-    const trigger = vx > 0.2 || Math.abs(mx) > 100;
-    
-    if (!down && trigger && xDir > 0) {
-      api.start({ x: 500, config: { duration: 200 } });
-      setTimeout(() => onDelete(index), 200);
-    } else {
-      api.start({ x: down ? mx : 0, immediate: down });
-    }
-  }, { axis: 'x', filterTaps: true });
+  const handleSave = () => {
+    onEdit(index, {
+      ...fast,
+      duration: editedDuration,
+      completedAt: new Date(editedDate).getTime()
+    });
+    setIsEditing(false);
+  };
 
   return (
-    <animated.div
-      {...bind()}
-      style={{
-        x,
-        touchAction: 'pan-y',
-        position: 'relative',
-      }}
-      className="bg-white rounded-lg shadow mb-2 cursor-grab active:cursor-grabbing"
-    >
-      <div className="p-4">
-        <p className="font-medium">{fast.type}</p>
-        <p className="text-sm text-gray-600">
-          Duration: {fast.duration}
-        </p>
-        <p className="text-sm text-gray-600">
-          Completed: {new Date(fast.completedAt).toLocaleDateString()}
-        </p>
-      </div>
-      <div className="absolute right-4 top-1/2 -translate-y-1/2 text-red-500">
-        <Trash2 size={20} />
-      </div>
-    </animated.div>
+    <div className="bg-white rounded-lg shadow mb-2 p-4">
+      {!isEditing ? (
+        <div className="flex justify-between items-center">
+          <div>
+            <p className="font-medium">
+              {new Date(fast.completedAt).toLocaleDateString(undefined, {
+                weekday: 'short',
+                month: 'short',
+                day: 'numeric'
+              })}
+            </p>
+            <p className="text-sm text-gray-600">
+              Duration: {fast.duration}
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setIsEditing(true)}
+              className="p-2 text-purple-600 hover:bg-purple-50 rounded-full transition-colors"
+              aria-label="Edit fast"
+            >
+              <Pencil size={20} />
+            </button>
+            <button
+              onClick={() => onDelete(index)}
+              className="p-2 text-red-500 hover:bg-red-50 rounded-full transition-colors"
+              aria-label="Delete fast"
+            >
+              <Trash2 size={20} />
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Date
+            </label>
+            <input
+              type="date"
+              value={editedDate}
+              onChange={(e) => setEditedDate(e.target.value)}
+              className="w-full p-2 border rounded-lg"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Duration
+            </label>
+            <input
+              type="text"
+              value={editedDuration}
+              onChange={(e) => setEditedDuration(e.target.value)}
+              className="w-full p-2 border rounded-lg"
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={() => setIsEditing(false)}
+              className="p-2 text-gray-600 hover:bg-gray-50 rounded-full transition-colors"
+            >
+              <X size={20} />
+            </button>
+            <button
+              onClick={handleSave}
+              className="p-2 text-green-600 hover:bg-green-50 rounded-full transition-colors"
+            >
+              <Check size={20} />
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 };
 
 const FastingHistory = ({ history, setHistory }) => {
   const handleDelete = (index) => {
     const newHistory = history.filter((_, i) => i !== index);
+    setHistory(newHistory);
+    localStorage.setItem('fastingHistory', JSON.stringify(newHistory));
+  };
+
+  const handleEdit = (index, updatedFast) => {
+    const newHistory = [...history];
+    newHistory[index] = updatedFast;
     setHistory(newHistory);
     localStorage.setItem('fastingHistory', JSON.stringify(newHistory));
   };
@@ -61,11 +119,12 @@ const FastingHistory = ({ history, setHistory }) => {
       ) : (
         <div className="space-y-2">
           {history.map((fast, index) => (
-            <SwipeableHistoryItem
+            <FastingHistoryItem
               key={index}
               fast={fast}
               index={index}
               onDelete={handleDelete}
+              onEdit={handleEdit}
             />
           ))}
         </div>
