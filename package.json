@@ -1,21 +1,23 @@
 {
   "name": "fasting-tracker",
+  "private": true,
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "start": "node server.js",
+    "dev": "concurrently \"vite\" \"node server.js\"",
     "build": "vite build",
-    "dev": "vite",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "start": "node server.js"
   },
   "dependencies": {
-    "express": "^4.18.2",
-    "cors": "^2.8.5",
-    "body-parser": "^1.20.1",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
     "axios": "^1.6.2",
-    "lucide-react": "^0.263.1"
+    "body-parser": "^1.20.2",
+    "concurrently": "^8.2.2",
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "lucide-react": "^0.263.1",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.0.3",

@@ -109,181 +109,92 @@ const FastingTracker = () => {
   const [history, setHistory] = useState([]);
   const [fastingGoal, setFastingGoal] = useState(16);
   const [showSettings, setShowSettings] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
   const [showCustomStart, setShowCustomStart] = useState(false);
   const [customStartTime, setCustomStartTime] = useState('');
+  const [analytics, setAnalytics] = useState({
+    currentStreak: 0,
+    totalFasts: 0,
+    averageDuration: 0,
+    longestFast: 0,
+    completionRate: 0
+  });
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  // Load history from server on component mount
+  // Load history and analytics from server
   useEffect(() => {
-    const fetchHistory = async () => {
+    const fetchData = async () => {
+      setIsLoading(true);
       try {
-        const response = await axios.get('/api/history');
-        if (response.data && Array.isArray(response.data)) {
-          setHistory(response.data);
+        const [historyResponse, analyticsResponse] = await Promise.all([
+          axios.get('/api/history'),
+          axios.get('/api/analytics')
+        ]);
+        
+        if (historyResponse.data) {
+          setHistory(historyResponse.data);
+        }
+        
+        if (analyticsResponse.data) {
+          setAnalytics(analyticsResponse.data);
         }
       } catch (error) {
-        console.error('Error fetching history:', error);
-        // Fallback to localStorage if server fetch fails
-        const savedHistory = localStorage.getItem('fastingHistory');
-        if (savedHistory) {
-          setHistory(JSON.parse(savedHistory));
-        }
+        console.error('Error fetching data:', error);
+        setError('Failed to load data. Please try again.');
       } finally {
         setIsLoading(false);
       }
     };
 
-    fetchHistory();
+    fetchData();
   }, []);
 
-  // Save history to both localStorage and server
-  const saveHistory = async (newHistory) => {
-    setHistory(newHistory);
-    localStorage.setItem('fastingHistory', JSON.stringify(newHistory));
-    try {
-      await axios.post('/api/history', newHistory);
-    } catch (error) {
-      console.error('Error saving history:', error);
-    }
-  };
-
-  // Load saved data on component mount
+  // Load active fast state
   useEffect(() => {
-    try {
-      let savedHistory = localStorage.getItem('fastHistory_v2');
-      const savedGoal = localStorage.getItem('fastingGoal_v2');
-      const savedActiveState = localStorage.getItem('activeFast_v2');
-
-      if (savedHistory) {
-        const parsedHistory = JSON.parse(savedHistory);
-        setHistory(parsedHistory.map(fast => ({
-          ...fast,
-          startTime: new Date(fast.startTime),
-          endTime: new Date(fast.endTime)
-        })));
-      }
-      
-      if (savedGoal) {
-        setFastingGoal(parseInt(savedGoal));
-      }
-
-      if (savedActiveState) {
-        const activeFast = JSON.parse(savedActiveState);
-        setFastStartTime(new Date(activeFast.startTime));
+    const savedActiveState = localStorage.getItem('activeFast');
+    if (savedActiveState) {
+      try {
+        const { startTime } = JSON.parse(savedActiveState);
+        setFastStartTime(new Date(startTime));
         setIsActive(true);
+      } catch (error) {
+        console.error('Error loading active fast:', error);
       }
-    } catch (error) {
-      console.error('Error loading saved data:', error);
     }
   }, []);
 
-  // Storage effects
-  useEffect(() => {
-    if (history.length > 0) {
-      localStorage.setItem('fastHistory_v2', JSON.stringify(history));
-    }
-  }, [history]);
-
-  useEffect(() => {
-    localStorage.setItem('fastingGoal_v2', fastingGoal.toString());
-  }, [fastingGoal]);
-
-  useEffect(() => {
-    if (isActive && fastStartTime) {
-      localStorage.setItem('activeFast_v2', JSON.stringify({ startTime: fastStartTime }));
-    } else {
-      localStorage.removeItem('activeFast_v2');
-    }
-  }, [isActive, fastStartTime]);
-
+  // Timer effect
   useEffect(() => {
     let interval = null;
-    if (isActive) {
+    if (isActive && fastStartTime) {
       interval = setInterval(() => {
         const currentTime = new Date().getTime();
-        const startTime = fastStartTime.getTime();
+        const startTime = new Date(fastStartTime).getTime();
         setElapsedTime(Math.floor((currentTime - startTime) / 1000));
       }, 1000);
     }
     return () => clearInterval(interval);
   }, [isActive, fastStartTime]);
 
-  const formatTime = (totalSeconds) => {
-    const hours = Math.floor(totalSeconds / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
-    const seconds = totalSeconds % 60;
-    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-  };
-
-  const startFast = () => {
-    setFastStartTime(new Date());
-    setIsActive(true);
-    setElapsedTime(0);
-  };
-
-  const stopFast = () => {
-    const endTime = new Date();
-    const duration = elapsedTime;
-    setHistory([...history, {
-      startTime: fastStartTime,
-      duration: duration,
-      endTime: endTime
-    }]);
-    setIsActive(false);
-    setFastStartTime(null);
-    setElapsedTime(0);
-  };
-
-  const getProgressPercentage = () => {
-    return Math.min((elapsedTime / (fastingGoal * 3600)) * 100, 100);
-  };
-
-  const handleCustomStart = (e) => {
-    e.preventDefault();
-    if (!customStartTime) return;
-
-    const customDate = new Date();
-    const [hours, minutes] = customStartTime.split(':');
-    customDate.setHours(parseInt(hours), parseInt(minutes), 0, 0);
-
-    // If the time is in the future, subtract 24 hours
-    if (customDate > new Date()) {
-      customDate.setDate(customDate.getDate() - 1);
+  // Save active fast state
+  useEffect(() => {
+    if (isActive && fastStartTime) {
+      localStorage.setItem('activeFast', JSON.stringify({ 
+        startTime: fastStartTime 
+      }));
+    } else {
+      localStorage.removeItem('activeFast');
     }
-
-    setFastStartTime(customDate);
-    setIsActive(true);
-    setElapsedTime(Math.floor((Date.now() - customDate.getTime()) / 1000));
-    setShowCustomStart(false);
-  };
-
-  const handleDeleteFast = (index) => {
-    const updatedHistory = history.filter((_, i) => i !== index);
-    saveHistory(updatedHistory);
-  };
-
-  const handleEditFast = (index, updatedFast) => {
-    const updatedHistory = [...history];
-    updatedHistory[index] = updatedFast;
-    saveHistory(updatedHistory);
-  };
-
-  const formatDuration = (milliseconds) => {
-    const seconds = Math.floor(milliseconds / 1000);
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const remainingSeconds = seconds % 60;
-    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
-  };
+  }, [isActive, fastStartTime]);
 
   const handleCompleteFast = () => {
     const endTime = Date.now();
     const duration = formatDuration(endTime - fastStartTime.getTime());
-
-    // Find the fast we're continuing by matching start times
+    
     const existingFastIndex = history.findIndex(fast => {
+      if (!fast.startTime) return false;
       const timeDiff = Math.abs(fast.startTime - fastStartTime.getTime());
-      return timeDiff < 5000; // 5 second tolerance
+      return timeDiff < 5000;
     });
 
     const newFast = {
@@ -295,19 +206,92 @@ const FastingTracker = () => {
 
     let updatedHistory;
     if (existingFastIndex !== -1) {
-      // Update the existing fast
       updatedHistory = history.map((fast, index) => 
         index === existingFastIndex ? newFast : fast
       );
     } else {
-      // Add new fast
       updatedHistory = [newFast, ...history];
     }
 
-    saveHistory(updatedHistory);
+    setHistory(updatedHistory);
+    localStorage.setItem('fastingHistory', JSON.stringify(updatedHistory));
+    axios.post('/api/history', updatedHistory)
+      .catch(error => console.error('Error saving history:', error));
+      
     setIsActive(false);
     setFastStartTime(null);
     setElapsedTime(0);
+  };
+
+  const handleStartFast = (customDate = null) => {
+    const startTime = customDate || new Date();
+    setFastStartTime(startTime);
+    setIsActive(true);
+    setElapsedTime(0);
+    setShowCustomStart(false);
+  };
+
+  const handleCustomStart = (e) => {
+    e.preventDefault();
+    if (!customStartTime) return;
+
+    const [hours, minutes] = customStartTime.split(':');
+    const customDate = new Date();
+    customDate.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+
+    if (customDate > new Date()) {
+      customDate.setDate(customDate.getDate() - 1);
+    }
+
+    handleStartFast(customDate);
+  };
+
+  const handleDeleteFast = async (index) => {
+    try {
+      const updatedHistory = history.filter((_, i) => i !== index);
+      await axios.post('/api/history', updatedHistory);
+      
+      const [historyResponse, analyticsResponse] = await Promise.all([
+        axios.get('/api/history'),
+        axios.get('/api/analytics')
+      ]);
+      
+      setHistory(historyResponse.data);
+      setAnalytics(analyticsResponse.data);
+    } catch (error) {
+      console.error('Error deleting fast:', error);
+      setError('Failed to delete fast. Please try again.');
+    }
+  };
+
+  const handleEditFast = async (index, updatedFast) => {
+    try {
+      const updatedHistory = [...history];
+      updatedHistory[index] = updatedFast;
+      await axios.post('/api/history', updatedHistory);
+      
+      const [historyResponse, analyticsResponse] = await Promise.all([
+        axios.get('/api/history'),
+        axios.get('/api/analytics')
+      ]);
+      
+      setHistory(historyResponse.data);
+      setAnalytics(analyticsResponse.data);
+    } catch (error) {
+      console.error('Error updating fast:', error);
+      setError('Failed to update fast. Please try again.');
+    }
+  };
+
+  const formatTime = (totalSeconds) => {
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  };
+
+  const getProgressPercentage = () => {
+    return Math.min((elapsedTime / (fastingGoal * 3600)) * 100, 100);
   };
 
   const handleContinueFast = (fast) => {
@@ -324,20 +308,42 @@ const FastingTracker = () => {
 
       {/* Main Content */}
       <div className="px-6 pb-8">
-        {/* Header */}
-        <div className="flex justify-between items-center mb-8">
-          <div>
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">
-              Mindful Fast
-            </h1>
-            <p className="text-gray-500 text-sm mt-1">Track your fasting journey</p>
+        {/* Header with Analytics */}
+        <div className="mb-8">
+          <div className="flex justify-between items-center mb-4">
+            <div>
+              <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">
+                Mindful Fast
+              </h1>
+              <p className="text-gray-500 text-sm mt-1">Track your fasting journey</p>
+            </div>
+            <button 
+              onClick={() => setShowSettings(!showSettings)}
+              className="p-3 text-gray-600 hover:bg-white/50 active:bg-white/80 rounded-full transition-all duration-300"
+            >
+              <Settings size={24} />
+            </button>
           </div>
-          <button 
-            onClick={() => setShowSettings(!showSettings)}
-            className="p-3 text-gray-600 hover:bg-white/50 active:bg-white/80 rounded-full transition-all duration-300"
-          >
-            <Settings size={24} />
-          </button>
+
+          {/* Analytics Cards */}
+          <div className="grid grid-cols-2 gap-4 mb-6">
+            <div className="bg-white/80 backdrop-blur-sm rounded-xl p-4">
+              <div className="text-sm text-gray-500">Current Streak</div>
+              <div className="text-2xl font-bold text-purple-600">{analytics.currentStreak} days</div>
+            </div>
+            <div className="bg-white/80 backdrop-blur-sm rounded-xl p-4">
+              <div className="text-sm text-gray-500">Completion Rate</div>
+              <div className="text-2xl font-bold text-blue-600">{analytics.completionRate.toFixed(1)}%</div>
+            </div>
+            <div className="bg-white/80 backdrop-blur-sm rounded-xl p-4">
+              <div className="text-sm text-gray-500">Longest Fast</div>
+              <div className="text-2xl font-bold text-green-600">{formatTime(analytics.longestFast)}</div>
+            </div>
+            <div className="bg-white/80 backdrop-blur-sm rounded-xl p-4">
+              <div className="text-sm text-gray-500">Average Duration</div>
+              <div className="text-2xl font-bold text-orange-600">{formatTime(analytics.averageDuration)}</div>
+            </div>
+          </div>
         </div>
 
         {/* Timer Card */}
@@ -426,29 +432,49 @@ const FastingTracker = () => {
           )}
         </div>
 
-        {/* Fasting History Section */}
-        <div className="mt-8">
-          <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
-            <span className="text-purple-600">⏰</span> 
-            Fasting History
-          </h2>
-          {history.length === 0 ? (
-            <p className="text-gray-600">Begin your fasting journey today!</p>
-          ) : (
-            <div className="space-y-2">
-              {history.map((fast, index) => (
-                <FastingHistoryItem
-                  key={index}
-                  fast={fast}
-                  index={index}
-                  onDelete={handleDeleteFast}
-                  onEdit={handleEditFast}
-                  onContinue={handleContinueFast}
-                />
-              ))}
-            </div>
-          )}
-        </div>
+        {/* Error Message */}
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg mb-6">
+            {error}
+            <button 
+              onClick={() => setError(null)}
+              className="float-right text-red-400 hover:text-red-600"
+            >
+              <X size={20} />
+            </button>
+          </div>
+        )}
+
+        {/* Loading State */}
+        {isLoading ? (
+          <div className="flex justify-center items-center py-8">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
+          </div>
+        ) : (
+          /* Fasting History Section */
+          <div className="mt-8">
+            <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
+              <span className="text-purple-600">⏰</span> 
+              Fasting History
+            </h2>
+            {history.length === 0 ? (
+              <p className="text-gray-600">Begin your fasting journey today!</p>
+            ) : (
+              <div className="space-y-2">
+                {history.map((fast, index) => (
+                  <FastingHistoryItem
+                    key={index}
+                    fast={fast}
+                    index={index}
+                    onDelete={handleDeleteFast}
+                    onEdit={handleEditFast}
+                    onContinue={handleContinueFast}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Settings Modal */}
@@ -473,7 +499,7 @@ const FastingTracker = () => {
                     setShowSettings(false);
                   }}
                   className={`w-full p-4 rounded-xl text-left transition-all duration-300 ${
-                    fastingGoal === hours 
+                    fastingGoal === hours
                       ? 'bg-gradient-to-r from-purple-500 to-blue-500 text-white shadow-lg' 
                       : 'bg-gray-50 hover:bg-gray-100'
                   }`}

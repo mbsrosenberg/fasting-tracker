@@ -14,87 +14,150 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(bodyParser.json());
 
-// Use a persistent path for production
-const filePath = process.env.NODE_ENV === 'production'
-  ? path.join(process.cwd(), 'data', 'fastingHistory.json')  // Store in project's data directory
-  : path.join(process.env.HOME || process.env.USERPROFILE, '.fastingHistory.json');
+// Data file paths
+const DATA_DIR = path.join(process.cwd(), 'data');
+const FASTING_HISTORY_PATH = path.join(DATA_DIR, 'fastingHistory.json');
+const BACKUP_PATH = path.join(DATA_DIR, 'fastingHistory.backup.json');
 
-// Create data directory if it doesn't exist
-if (!fs.existsSync(path.join(process.cwd(), 'data'))) {
-  fs.mkdirSync(path.join(process.cwd(), 'data'), { recursive: true });
+// Ensure data directory exists
+if (!fs.existsSync(DATA_DIR)) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
-// Initialize history file with existing data
-const initializeHistoryFile = () => {
-  try {
-    if (!fs.existsSync(filePath)) {
-      // Check for backup first
-      if (fs.existsSync(`${filePath}.backup`)) {
-        const backupData = fs.readFileSync(`${filePath}.backup`, 'utf8');
-        fs.writeFileSync(filePath, backupData);
-        console.log('Restored history from backup');
-        return;
-      }
-      // Create new file if no backup exists
-      fs.writeFileSync(filePath, '[]', 'utf8');
-      console.log('Created new history file');
+// Data validation
+const validateFastingSession = (session) => {
+  const requiredFields = ['type', 'duration', 'completedAt', 'startTime'];
+  const errors = [];
+
+  for (const field of requiredFields) {
+    if (!session[field]) {
+      errors.push(`Missing required field: ${field}`);
     }
-  } catch (error) {
-    console.error('Error initializing history file:', error);
   }
+
+  return errors;
 };
 
-initializeHistoryFile();
-
-// Backup the history file periodically
-const backupHistory = () => {
+// Data management functions
+const readHistory = () => {
   try {
-    const data = fs.readFileSync(filePath, 'utf8');
-    const backupPath = `${filePath}.backup`;
-    fs.writeFileSync(backupPath, data);
-    console.log('History backup created successfully');
-  } catch (error) {
-    console.error('Error creating backup:', error);
-  }
-};
-
-// Backup every hour
-setInterval(backupHistory, 3600000);
-
-app.get('/api/history', (req, res) => {
-  try {
-    let data = '[]';
-    if (fs.existsSync(filePath)) {
-      data = fs.readFileSync(filePath, 'utf8');
-    } else if (fs.existsSync(`${filePath}.backup`)) {
-      data = fs.readFileSync(`${filePath}.backup`, 'utf8');
-      // Restore main file from backup
-      fs.writeFileSync(filePath, data);
+    if (fs.existsSync(FASTING_HISTORY_PATH)) {
+      const data = fs.readFileSync(FASTING_HISTORY_PATH, 'utf8');
+      return JSON.parse(data);
     }
-    const history = JSON.parse(data);
-    // Sort history by completedAt in descending order
-    history.sort((a, b) => b.completedAt - a.completedAt);
-    res.json(history);
+    if (fs.existsSync(BACKUP_PATH)) {
+      const data = fs.readFileSync(BACKUP_PATH, 'utf8');
+      fs.writeFileSync(FASTING_HISTORY_PATH, data);
+      return JSON.parse(data);
+    }
+    return [];
   } catch (error) {
     console.error('Error reading history:', error);
+    return [];
+  }
+};
+
+const writeHistory = (history) => {
+  try {
+    const sortedHistory = history.sort((a, b) => new Date(b.startTime) - new Date(a.startTime));
+    fs.writeFileSync(FASTING_HISTORY_PATH, JSON.stringify(sortedHistory, null, 2));
+    // Create backup
+    fs.writeFileSync(BACKUP_PATH, JSON.stringify(sortedHistory, null, 2));
+    return true;
+  } catch (error) {
+    console.error('Error writing history:', error);
+    return false;
+  }
+};
+
+// Analytics functions
+const calculateStreak = (history) => {
+  if (!history.length) return 0;
+  
+  const today = new Date().setHours(0, 0, 0, 0);
+  let streak = 0;
+  let currentDate = today;
+  
+  for (const fast of history) {
+    const fastDate = new Date(fast.endTime).setHours(0, 0, 0, 0);
+    if (fastDate === currentDate) {
+      streak++;
+      currentDate -= 86400000; // Subtract one day in milliseconds
+    } else if (fastDate < currentDate) {
+      break;
+    }
+  }
+  
+  return streak;
+};
+
+const getAnalytics = (history) => {
+  if (!history.length) {
+    return {
+      currentStreak: 0,
+      totalFasts: 0,
+      averageDuration: 0,
+      longestFast: 0,
+      completionRate: 0
+    };
+  }
+
+  const totalFasts = history.length;
+  const currentStreak = calculateStreak(history);
+  const durations = history.map(fast => parseInt(fast.duration));
+  const averageDuration = durations.reduce((a, b) => a + b, 0) / totalFasts;
+  const longestFast = Math.max(...durations);
+  const completedFasts = history.filter(fast => fast.completed).length;
+  const completionRate = (completedFasts / totalFasts) * 100;
+
+  return {
+    currentStreak,
+    totalFasts,
+    averageDuration,
+    longestFast,
+    completionRate
+  };
+};
+
+// API Routes
+app.get('/api/history', (req, res) => {
+  try {
+    const history = readHistory();
+    res.json(history);
+  } catch (error) {
     res.status(500).json({ error: 'Failed to load history' });
   }
 });
 
 app.post('/api/history', (req, res) => {
   try {
-    const newHistory = req.body;
-    // Ensure history is an array and sort it
-    const sortedHistory = Array.isArray(newHistory) 
-      ? newHistory.sort((a, b) => b.completedAt - a.completedAt)
-      : [];
+    const session = req.body;
+    const validationErrors = validateFastingSession(session);
     
-    fs.writeFileSync(filePath, JSON.stringify(sortedHistory, null, 2));
-    backupHistory(); // Create backup after successful write
-    res.status(200).json({ message: 'History saved successfully' });
+    if (validationErrors.length > 0) {
+      return res.status(400).json({ errors: validationErrors });
+    }
+
+    const history = readHistory();
+    history.unshift(session);
+    
+    if (writeHistory(history)) {
+      res.status(200).json({ message: 'Session saved successfully' });
+    } else {
+      res.status(500).json({ error: 'Failed to save session' });
+    }
   } catch (error) {
-    console.error('Error saving history:', error);
-    res.status(500).json({ error: 'Failed to save history' });
+    res.status(500).json({ error: 'Failed to process request' });
+  }
+});
+
+app.get('/api/analytics', (req, res) => {
+  try {
+    const history = readHistory();
+    const analytics = getAnalytics(history);
+    res.json(analytics);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to generate analytics' });
   }
 });
 
@@ -106,29 +169,8 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
-const startServer = async () => {
-  try {
-    await new Promise((resolve, reject) => {
-      const server = app.listen(PORT, () => {
-        console.log(`Server is running on http://localhost:${PORT}`);
-        resolve();
-      });
-
-      server.on('error', (error) => {
-        if (error.code === 'EADDRINUSE') {
-          console.error(`Port ${PORT} is already in use. Please try a different port.`);
-        } else {
-          console.error('Server error:', error);
-        }
-        reject(error);
-      });
-    });
-  } catch (error) {
-    console.error('Failed to start server:', error);
-    process.exit(1);
-  }
-};
-
-startServer();
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
 
 export default app; 
