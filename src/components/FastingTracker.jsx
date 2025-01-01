@@ -183,6 +183,7 @@ const FastingTracker = () => {
         const targetSeconds = periodType === 'fasting' 
           ? fastingGoal * 3600 
           : EATING_PERIOD;
+        
         if (newElapsedTime >= targetSeconds) {
           if (periodType === 'fasting') {
             handleCompleteFast();
@@ -226,6 +227,7 @@ const FastingTracker = () => {
     setPeriodType('eating');
     setFastStartTime(new Date());
     setElapsedTime(0);
+    setIsActive(true);
     localStorage.setItem('activePeriod', JSON.stringify({ 
       type: 'eating',
       startTime: new Date().getTime()
@@ -236,6 +238,7 @@ const FastingTracker = () => {
     setPeriodType('fasting');
     setFastStartTime(new Date());
     setElapsedTime(0);
+    setIsActive(true);
     localStorage.setItem('activePeriod', JSON.stringify({ 
       type: 'fasting',
       startTime: new Date().getTime()
@@ -321,6 +324,15 @@ const FastingTracker = () => {
     setFastStartTime(startTime);
     setIsActive(true);
     setElapsedTime(Math.floor((Date.now() - startTime.getTime()) / 1000));
+  };
+
+  const handleCompleteClick = () => {
+    console.log('Button clicked!');
+    if (periodType === 'fasting') {
+      handleCompleteFast();
+    } else {
+      handleCompleteEating();
+    }
   };
 
   return (
@@ -446,8 +458,8 @@ const FastingTracker = () => {
             </div>
           ) : (
             <button
-              onClick={periodType === 'fasting' ? handleCompleteFast : handleCompleteEating}
-              className="w-full bg-gradient-to-r from-red-500 to-orange-500 text-white py-3 px-6 rounded-lg font-medium hover:opacity-90 transition-opacity mt-4"
+              onClick={handleCompleteClick}
+              className="w-full bg-gradient-to-r from-purple-500 to-blue-500 text-white py-3 px-6 rounded-lg font-medium hover:opacity-90 transition-opacity mt-4"
             >
               {periodType === 'fasting' ? 'Complete Fast' : 'Complete Eating Period'}
             </button>
