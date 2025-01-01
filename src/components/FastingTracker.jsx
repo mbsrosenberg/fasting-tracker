@@ -201,6 +201,7 @@ const FastingTracker = () => {
     const endTime = Date.now();
     const duration = formatDuration(endTime - fastStartTime.getTime());
     
+    // Find any existing fast with a start time within 5 seconds
     const existingFastIndex = history.findIndex(fast => {
       if (!fast.startTime) return false;
       const timeDiff = Math.abs(fast.startTime - fastStartTime.getTime());
@@ -216,21 +217,31 @@ const FastingTracker = () => {
 
     let updatedHistory;
     if (existingFastIndex !== -1) {
+      // Update existing fast
       updatedHistory = history.map((fast, index) => 
         index === existingFastIndex ? newFast : fast
       );
     } else {
+      // Add new fast
       updatedHistory = [newFast, ...history];
     }
 
+    // Save to both local storage and server
     setHistory(updatedHistory);
     localStorage.setItem('fastingHistory', JSON.stringify(updatedHistory));
-    axios.post('/api/history', updatedHistory)
-      .catch(error => console.error('Error saving history:', error));
-      
+    
+    try {
+      axios.post('/api/history', updatedHistory)
+        .catch(error => console.error('Error saving to server:', error));
+    } catch (error) {
+      console.error('Error saving history:', error);
+    }
+
+    // Reset the active fast state
     setIsActive(false);
     setFastStartTime(null);
     setElapsedTime(0);
+    localStorage.removeItem('activeFast');
   };
 
   const handleStartFast = (customDate = null) => {
