@@ -14,15 +14,49 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(bodyParser.json());
 
-// Data file paths
-const DATA_DIR = path.join(process.cwd(), 'data');
+// Data file paths - Use an absolute path that persists between deployments
+const DATA_DIR = process.env.NODE_ENV === 'production'
+  ? path.join(process.cwd(), '../data') // Store outside the deployment directory
+  : path.join(process.cwd(), 'data');
+
 const FASTING_HISTORY_PATH = path.join(DATA_DIR, 'fastingHistory.json');
 const BACKUP_PATH = path.join(DATA_DIR, 'fastingHistory.backup.json');
 
-// Ensure data directory exists
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-}
+// Ensure data directory exists and initialize files
+const initializeDataStorage = () => {
+  try {
+    // Create data directory if it doesn't exist
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+
+    // Initialize history file if it doesn't exist
+    if (!fs.existsSync(FASTING_HISTORY_PATH)) {
+      // Check for backup first
+      if (fs.existsSync(BACKUP_PATH)) {
+        fs.copyFileSync(BACKUP_PATH, FASTING_HISTORY_PATH);
+      } else {
+        fs.writeFileSync(FASTING_HISTORY_PATH, '[]', 'utf8');
+      }
+    }
+  } catch (error) {
+    console.error('Error initializing data storage:', error);
+  }
+};
+
+initializeDataStorage();
+
+// Add automatic backup every hour
+setInterval(() => {
+  try {
+    if (fs.existsSync(FASTING_HISTORY_PATH)) {
+      fs.copyFileSync(FASTING_HISTORY_PATH, BACKUP_PATH);
+      console.log('Backup created successfully');
+    }
+  } catch (error) {
+    console.error('Backup failed:', error);
+  }
+}, 3600000); // 1 hour
 
 // Data validation
 const validateFastingSession = (session) => {
@@ -42,8 +76,7 @@ const validateFastingSession = (session) => {
 const readHistory = () => {
   try {
     if (fs.existsSync(FASTING_HISTORY_PATH)) {
-      const data = fs.readFileSync(FASTING_HISTORY_PATH, 'utf8');
-      return JSON.parse(data);
+      return JSON.parse(fs.readFileSync(FASTING_HISTORY_PATH, 'utf8'));
     }
     if (fs.existsSync(BACKUP_PATH)) {
       const data = fs.readFileSync(BACKUP_PATH, 'utf8');
@@ -59,10 +92,9 @@ const readHistory = () => {
 
 const writeHistory = (history) => {
   try {
-    const sortedHistory = history.sort((a, b) => new Date(b.startTime) - new Date(a.startTime));
-    fs.writeFileSync(FASTING_HISTORY_PATH, JSON.stringify(sortedHistory, null, 2));
-    // Create backup
-    fs.writeFileSync(BACKUP_PATH, JSON.stringify(sortedHistory, null, 2));
+    fs.writeFileSync(FASTING_HISTORY_PATH, JSON.stringify(history, null, 2));
+    // Create immediate backup
+    fs.copyFileSync(FASTING_HISTORY_PATH, BACKUP_PATH);
     return true;
   } catch (error) {
     console.error('Error writing history:', error);
@@ -125,29 +157,22 @@ app.get('/api/history', (req, res) => {
     const history = readHistory();
     res.json(history);
   } catch (error) {
+    console.error('Error serving history:', error);
     res.status(500).json({ error: 'Failed to load history' });
   }
 });
 
 app.post('/api/history', (req, res) => {
   try {
-    const session = req.body;
-    const validationErrors = validateFastingSession(session);
-    
-    if (validationErrors.length > 0) {
-      return res.status(400).json({ errors: validationErrors });
-    }
-
-    const history = readHistory();
-    history.unshift(session);
-    
-    if (writeHistory(history)) {
-      res.status(200).json({ message: 'Session saved successfully' });
+    const newHistory = req.body;
+    if (writeHistory(newHistory)) {
+      res.status(200).json({ message: 'History saved successfully' });
     } else {
-      res.status(500).json({ error: 'Failed to save session' });
+      res.status(500).json({ error: 'Failed to save history' });
     }
   } catch (error) {
-    res.status(500).json({ error: 'Failed to process request' });
+    console.error('Error saving history:', error);
+    res.status(500).json({ error: 'Failed to save history' });
   }
 });
 

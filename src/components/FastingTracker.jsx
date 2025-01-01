@@ -121,33 +121,43 @@ const FastingTracker = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Load history and analytics from server
   useEffect(() => {
-    const fetchData = async () => {
-      setIsLoading(true);
+    const loadHistory = async () => {
       try {
-        const [historyResponse, analyticsResponse] = await Promise.all([
-          axios.get('/api/history'),
-          axios.get('/api/analytics')
-        ]);
-        
-        if (historyResponse.data) {
-          setHistory(historyResponse.data);
-        }
-        
-        if (analyticsResponse.data) {
-          setAnalytics(analyticsResponse.data);
+        // Try to load from server first
+        const response = await axios.get('/api/history');
+        if (response.data && Array.isArray(response.data)) {
+          setHistory(response.data);
+          // Update localStorage with server data
+          localStorage.setItem('fastingHistory', JSON.stringify(response.data));
         }
       } catch (error) {
-        console.error('Error fetching data:', error);
-        setError('Failed to load data. Please try again.');
+        console.error('Error loading from server:', error);
+        // Fall back to localStorage if server fails
+        const savedHistory = localStorage.getItem('fastingHistory');
+        if (savedHistory) {
+          setHistory(JSON.parse(savedHistory));
+        }
       } finally {
         setIsLoading(false);
       }
     };
 
-    fetchData();
+    loadHistory();
   }, []);
+
+  // Update save function to handle both local and server storage
+  const saveHistory = async (newHistory) => {
+    setHistory(newHistory);
+    localStorage.setItem('fastingHistory', JSON.stringify(newHistory));
+    
+    try {
+      await axios.post('/api/history', newHistory);
+    } catch (error) {
+      console.error('Error saving to server:', error);
+      // Could add retry logic here
+    }
+  };
 
   // Load active fast state
   useEffect(() => {
