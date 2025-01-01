@@ -103,10 +103,11 @@ const FastingHistoryItem = ({ fast, index, onDelete, onEdit, onContinue }) => {
 };
 
 const FastingTracker = () => {
+  const [periodType, setPeriodType] = useState('fasting');
+  const [history, setHistory] = useState([]);
+  const [isActive, setIsActive] = useState(false);
   const [fastStartTime, setFastStartTime] = useState(null);
   const [elapsedTime, setElapsedTime] = useState(0);
-  const [isActive, setIsActive] = useState(false);
-  const [history, setHistory] = useState([]);
   const [fastingGoal, setFastingGoal] = useState(16);
   const [showSettings, setShowSettings] = useState(false);
   const [showCustomStart, setShowCustomStart] = useState(false);
@@ -121,19 +122,18 @@ const FastingTracker = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  const EATING_PERIOD = 8 * 3600;
+
   useEffect(() => {
     const loadHistory = async () => {
       try {
-        // Try to load from server first
         const response = await axios.get('/api/history');
         if (response.data && Array.isArray(response.data)) {
           setHistory(response.data);
-          // Update localStorage with server data
           localStorage.setItem('fastingHistory', JSON.stringify(response.data));
         }
       } catch (error) {
         console.error('Error loading from server:', error);
-        // Fall back to localStorage if server fails
         const savedHistory = localStorage.getItem('fastingHistory');
         if (savedHistory) {
           setHistory(JSON.parse(savedHistory));
@@ -146,7 +146,6 @@ const FastingTracker = () => {
     loadHistory();
   }, []);
 
-  // Update save function to handle both local and server storage
   const saveHistory = async (newHistory) => {
     setHistory(newHistory);
     localStorage.setItem('fastingHistory', JSON.stringify(newHistory));
@@ -155,53 +154,51 @@ const FastingTracker = () => {
       await axios.post('/api/history', newHistory);
     } catch (error) {
       console.error('Error saving to server:', error);
-      // Could add retry logic here
     }
   };
 
-  // Load active fast state
   useEffect(() => {
-    const savedActiveState = localStorage.getItem('activeFast');
+    const savedActiveState = localStorage.getItem('activePeriod');
     if (savedActiveState) {
       try {
-        const { startTime } = JSON.parse(savedActiveState);
+        const { type, startTime } = JSON.parse(savedActiveState);
+        setPeriodType(type);
         setFastStartTime(new Date(startTime));
         setIsActive(true);
       } catch (error) {
-        console.error('Error loading active fast:', error);
+        console.error('Error loading active period:', error);
       }
     }
   }, []);
 
-  // Timer effect
   useEffect(() => {
     let interval = null;
     if (isActive && fastStartTime) {
       interval = setInterval(() => {
         const currentTime = new Date().getTime();
         const startTime = new Date(fastStartTime).getTime();
-        setElapsedTime(Math.floor((currentTime - startTime) / 1000));
+        const newElapsedTime = Math.floor((currentTime - startTime) / 1000);
+        setElapsedTime(newElapsedTime);
+
+        const targetSeconds = periodType === 'fasting' 
+          ? fastingGoal * 3600 
+          : EATING_PERIOD;
+        if (newElapsedTime >= targetSeconds) {
+          if (periodType === 'fasting') {
+            handleCompleteFast();
+          } else {
+            handleCompleteEating();
+          }
+        }
       }, 1000);
     }
     return () => clearInterval(interval);
-  }, [isActive, fastStartTime]);
-
-  // Save active fast state
-  useEffect(() => {
-    if (isActive && fastStartTime) {
-      localStorage.setItem('activeFast', JSON.stringify({ 
-        startTime: fastStartTime 
-      }));
-    } else {
-      localStorage.removeItem('activeFast');
-    }
-  }, [isActive, fastStartTime]);
+  }, [isActive, fastStartTime, periodType, fastingGoal]);
 
   const handleCompleteFast = () => {
     const endTime = Date.now();
     const duration = formatDuration(endTime - fastStartTime.getTime());
     
-    // Find any existing fast with a start time within 5 seconds
     const existingFastIndex = history.findIndex(fast => {
       if (!fast.startTime) return false;
       const timeDiff = Math.abs(fast.startTime - fastStartTime.getTime());
@@ -217,16 +214,13 @@ const FastingTracker = () => {
 
     let updatedHistory;
     if (existingFastIndex !== -1) {
-      // Update existing fast
       updatedHistory = history.map((fast, index) => 
         index === existingFastIndex ? newFast : fast
       );
     } else {
-      // Add new fast
       updatedHistory = [newFast, ...history];
     }
 
-    // Save to both local storage and server
     setHistory(updatedHistory);
     localStorage.setItem('fastingHistory', JSON.stringify(updatedHistory));
     
@@ -237,11 +231,23 @@ const FastingTracker = () => {
       console.error('Error saving history:', error);
     }
 
-    // Reset the active fast state
-    setIsActive(false);
-    setFastStartTime(null);
+    setPeriodType('eating');
+    setFastStartTime(new Date());
     setElapsedTime(0);
-    localStorage.removeItem('activeFast');
+    localStorage.setItem('activePeriod', JSON.stringify({ 
+      type: 'eating',
+      startTime: new Date().getTime()
+    }));
+  };
+
+  const handleCompleteEating = () => {
+    setPeriodType('fasting');
+    setFastStartTime(new Date());
+    setElapsedTime(0);
+    localStorage.setItem('activePeriod', JSON.stringify({ 
+      type: 'fasting',
+      startTime: new Date().getTime()
+    }));
   };
 
   const handleStartFast = (customDate = null) => {
@@ -312,7 +318,10 @@ const FastingTracker = () => {
   };
 
   const getProgressPercentage = () => {
-    return Math.min((elapsedTime / (fastingGoal * 3600)) * 100, 100);
+    const targetSeconds = periodType === 'fasting' 
+      ? fastingGoal * 3600 
+      : EATING_PERIOD;
+    return Math.min((elapsedTime / targetSeconds) * 100, 100);
   };
 
   const handleContinueFast = (fast) => {
@@ -324,12 +333,9 @@ const FastingTracker = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-purple-50 to-blue-50">
-      {/* iOS-style status bar space */}
       <div className="h-12 bg-transparent"></div>
 
-      {/* Main Content */}
       <div className="px-6 pb-8">
-        {/* Header with Analytics */}
         <div className="mb-8">
           <div className="flex justify-between items-center mb-4">
             <div>
@@ -346,7 +352,6 @@ const FastingTracker = () => {
             </button>
           </div>
 
-          {/* Analytics Cards */}
           <div className="grid grid-cols-2 gap-4 mb-6">
             <div className="bg-white/80 backdrop-blur-sm rounded-xl p-4">
               <div className="text-sm text-gray-500">Current Streak</div>
@@ -367,27 +372,32 @@ const FastingTracker = () => {
           </div>
         </div>
 
-        {/* Timer Card */}
         <div className="bg-white/80 backdrop-blur-lg rounded-3xl shadow-lg p-8 mb-6">
-          {/* Current Fast Type */}
           <div className="text-center mb-4">
-            <span className="text-sm font-medium px-4 py-2 bg-purple-100 text-purple-700 rounded-full">
-              {fastingGoal}:8 Intermittent Fast
-            </span>
+            <h2 className="text-xl font-semibold">
+              {periodType === 'fasting' ? 'Fasting Period' : 'Eating Period'}
+            </h2>
+            <p className="text-gray-600">
+              {periodType === 'fasting' 
+                ? `Target: ${fastingGoal}:00:00`
+                : 'Target: 08:00:00'
+              }
+            </p>
           </div>
 
-          {/* Large Timer Display */}
           <div className="text-center mb-8">
             <div className="text-7xl font-light tracking-tight text-gray-900 font-mono">
               {formatTime(elapsedTime)}
             </div>
             <div className="mt-3 text-sm text-gray-500 flex items-center justify-center gap-2">
               <span className="inline-block w-2 h-2 rounded-full bg-purple-400 animate-pulse"></span>
-              Target: {formatTime(fastingGoal * 3600)}
+              Target: {formatTime(periodType === 'fasting' 
+                ? fastingGoal * 3600 
+                : EATING_PERIOD
+              )}
             </div>
           </div>
 
-          {/* Progress Circle */}
           <div className="relative w-56 h-56 mx-auto mb-8">
             <svg className="w-full h-full transform -rotate-90">
               <circle
@@ -420,7 +430,6 @@ const FastingTracker = () => {
             </div>
           </div>
 
-          {/* Action Button */}
           {!isActive ? (
             <div className="mt-8 space-y-4">
               <button
@@ -445,15 +454,14 @@ const FastingTracker = () => {
             </div>
           ) : (
             <button
-              onClick={handleCompleteFast}
-              className="w-full py-4 bg-gradient-to-r from-red-500 to-orange-500 text-white text-lg font-semibold rounded-2xl active:opacity-90 transition-all duration-300 shadow-lg shadow-red-200 hover:shadow-xl hover:shadow-red-300"
+              onClick={periodType === 'fasting' ? handleCompleteFast : handleCompleteEating}
+              className="w-full bg-gradient-to-r from-red-500 to-orange-500 text-white py-3 px-6 rounded-lg font-medium hover:opacity-90 transition-opacity mt-4"
             >
-              Complete Fast
+              {periodType === 'fasting' ? 'Complete Fast' : 'Complete Eating Period'}
             </button>
           )}
         </div>
 
-        {/* Error Message */}
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg mb-6">
             {error}
@@ -466,13 +474,11 @@ const FastingTracker = () => {
           </div>
         )}
 
-        {/* Loading State */}
         {isLoading ? (
           <div className="flex justify-center items-center py-8">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
           </div>
         ) : (
-          /* Fasting History Section */
           <div className="mt-8">
             <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
               <span className="text-purple-600">⏰</span> 
@@ -498,7 +504,6 @@ const FastingTracker = () => {
         )}
       </div>
 
-      {/* Settings Modal */}
       {showSettings && (
         <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-50 transition-opacity">
           <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl p-6 animate-slide-up">
@@ -539,7 +544,6 @@ const FastingTracker = () => {
         </div>
       )}
 
-      {/* Custom Start Time Modal */}
       {showCustomStart && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-lg p-6 w-full max-w-md animate-slide-up">
