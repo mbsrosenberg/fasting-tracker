@@ -221,16 +221,8 @@ const FastingTracker = () => {
       updatedHistory = [newFast, ...history];
     }
 
-    setHistory(updatedHistory);
-    localStorage.setItem('fastingHistory', JSON.stringify(updatedHistory));
+    saveHistory(updatedHistory);
     
-    try {
-      axios.post('/api/history', updatedHistory)
-        .catch(error => console.error('Error saving to server:', error));
-    } catch (error) {
-      console.error('Error saving history:', error);
-    }
-
     setPeriodType('eating');
     setFastStartTime(new Date());
     setElapsedTime(0);
